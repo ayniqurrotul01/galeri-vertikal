@@ -1,0 +1,31 @@
+name: Buat APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Ambil kode
+        uses: actions/checkout@v4
+      - name: Siapkan Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Siapkan Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Susun APK
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Simpan APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Galeri-Vertikal-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
