@@ -12,7 +12,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -53,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
     private GalleryAdapter galleryAdapter;
     private LinearLayout bilahPilihan;
     private TextView jumlahPilihan;
+    private TextView infoGaleri;
     private boolean sedangMembaca = false;
     private boolean layarPenuh = false;
     private LinearLayout bilahPembaca;
@@ -76,8 +76,12 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        tampilkanGaleri();
-        periksaIzinDanMuat();
+        try {
+            tampilkanGaleri();
+            periksaIzinDanMuat();
+        } catch (Throwable masalah) {
+            tampilkanModeAman();
+        }
     }
 
     private void tampilkanGaleri() {
@@ -103,6 +107,11 @@ public class MainActivity extends AppCompatActivity {
         TextView petunjuk = teks("Ketuk foto sesuai urutan yang kamu inginkan.", 14, Color.DKGRAY);
         petunjuk.setPadding(dp(18), 0, dp(18), dp(10));
         akar.addView(petunjuk);
+
+        infoGaleri = teks("Memuat foto…", 14, Color.DKGRAY);
+        infoGaleri.setGravity(Gravity.CENTER);
+        infoGaleri.setPadding(dp(18), dp(8), dp(18), dp(12));
+        akar.addView(infoGaleri);
 
         RecyclerView galeri = new RecyclerView(this);
         galeri.setLayoutManager(new GridLayoutManager(this, 3));
@@ -138,10 +147,15 @@ public class MainActivity extends AppCompatActivity {
         String izin = Build.VERSION.SDK_INT >= 33
                 ? Manifest.permission.READ_MEDIA_IMAGES
                 : Manifest.permission.READ_EXTERNAL_STORAGE;
-        if (ContextCompat.checkSelfPermission(this, izin) == PackageManager.PERMISSION_GRANTED) {
-            muatSemuaFoto();
-        } else {
-            ActivityCompat.requestPermissions(this, new String[]{izin}, IZIN_GAMBAR);
+        try {
+            if (ContextCompat.checkSelfPermission(this, izin) == PackageManager.PERMISSION_GRANTED) {
+                muatSemuaFoto();
+            } else {
+                if (infoGaleri != null) infoGaleri.setText("Izinkan akses agar semua foto tampil di sini.");
+                ActivityCompat.requestPermissions(this, new String[]{izin}, IZIN_GAMBAR);
+            }
+        } catch (Exception masalah) {
+            if (infoGaleri != null) infoGaleri.setText("Gunakan tombol Pilih foto untuk mulai.");
         }
     }
 
@@ -152,6 +166,7 @@ public class MainActivity extends AppCompatActivity {
         if (kode == IZIN_GAMBAR && hasil.length > 0 && hasil[0] == PackageManager.PERMISSION_GRANTED) {
             muatSemuaFoto();
         } else {
+            if (infoGaleri != null) infoGaleri.setText("Akses galeri tidak diberikan. Gunakan tombol Pilih foto.");
             Toast.makeText(this,
                     "Izin galeri ditolak. Kamu tetap bisa memakai tombol Pilih foto.",
                     Toast.LENGTH_LONG).show();
@@ -159,22 +174,63 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void muatSemuaFoto() {
-        semuaFoto.clear();
-        Uri koleksi = Build.VERSION.SDK_INT >= 29
-                ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
-        String[] kolom = {MediaStore.Images.Media._ID};
-        try (Cursor cursor = getContentResolver().query(
-                koleksi, kolom, null, null,
-                MediaStore.Images.Media.DATE_ADDED + " DESC")) {
-            if (cursor != null) {
-                int indeksId = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
-                while (cursor.moveToNext()) {
-                    semuaFoto.add(ContentUris.withAppendedId(koleksi, cursor.getLong(indeksId)));
+        if (infoGaleri != null) infoGaleri.setText("Memuat foto…");
+        new Thread(() -> {
+            ArrayList<Uri> hasilFoto = new ArrayList<>();
+            String pesanMasalah = null;
+            try {
+                Uri koleksi = Build.VERSION.SDK_INT >= 29
+                        ? MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+                        : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                String[] kolom = {MediaStore.Images.Media._ID};
+                try (Cursor cursor = getContentResolver().query(
+                        koleksi, kolom, null, null,
+                        MediaStore.Images.Media.DATE_ADDED + " DESC")) {
+                    if (cursor != null) {
+                        int indeksId = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID);
+                        while (cursor.moveToNext()) {
+                            hasilFoto.add(ContentUris.withAppendedId(
+                                    koleksi, cursor.getLong(indeksId)));
+                        }
+                    }
                 }
+            } catch (Exception masalah) {
+                pesanMasalah = "Foto tidak bisa dimuat otomatis. Gunakan tombol Pilih foto.";
             }
-        }
-        if (galleryAdapter != null) galleryAdapter.notifyDataSetChanged();
+            String pesanAkhir = pesanMasalah;
+            runOnUiThread(() -> {
+                if (isFinishing() || isDestroyed()) return;
+                semuaFoto.clear();
+                semuaFoto.addAll(hasilFoto);
+                if (galleryAdapter != null) galleryAdapter.notifyDataSetChanged();
+                if (infoGaleri != null) {
+                    if (pesanAkhir != null) infoGaleri.setText(pesanAkhir);
+                    else if (hasilFoto.isEmpty()) infoGaleri.setText("Belum ada foto yang bisa ditampilkan.");
+                    else infoGaleri.setVisibility(View.GONE);
+                }
+            });
+        }, "muat-galeri").start();
+    }
+
+    private void tampilkanModeAman() {
+        LinearLayout akar = new LinearLayout(this);
+        akar.setOrientation(LinearLayout.VERTICAL);
+        akar.setGravity(Gravity.CENTER);
+        akar.setPadding(dp(28), dp(28), dp(28), dp(28));
+        akar.setBackgroundColor(Color.WHITE);
+        TextView judul = teks("Galeri Vertikal", 25, Color.BLACK);
+        judul.setTypeface(null, android.graphics.Typeface.BOLD);
+        judul.setGravity(Gravity.CENTER);
+        akar.addView(judul, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, dp(64)));
+        TextView pesan = teks("Galeri otomatis tidak dapat dibuka di perangkat ini. Kamu tetap bisa memilih beberapa gambar.", 16, Color.DKGRAY);
+        pesan.setGravity(Gravity.CENTER);
+        pesan.setPadding(0, dp(8), 0, dp(24));
+        akar.addView(pesan);
+        Button pilih = tombol("Pilih foto");
+        pilih.setOnClickListener(v -> bukaPemilihFoto());
+        akar.addView(pilih, new LinearLayout.LayoutParams(dp(150), dp(50)));
+        setContentView(akar);
     }
 
     private void bukaPemilihFoto() {
@@ -434,7 +490,8 @@ public class MainActivity extends AppCompatActivity {
             holder.cek.setVisibility(pilihan.contains(uri) ? View.VISIBLE : View.GONE);
             holder.itemView.setOnClickListener(v -> {
                 ubahPilihan(uri);
-                notifyItemChanged(holder.getBindingAdapterPosition());
+                int posisi = holder.getBindingAdapterPosition();
+                if (posisi != RecyclerView.NO_POSITION) notifyItemChanged(posisi);
             });
         }
 
