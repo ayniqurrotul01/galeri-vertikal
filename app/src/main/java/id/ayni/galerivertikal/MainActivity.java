@@ -3,11 +3,13 @@ package id.ayni.galerivertikal;
 import android.Manifest;
 import android.app.AlertDialog;
 import android.content.ContentUris;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -30,6 +32,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
@@ -38,6 +41,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DecodeFormat;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
+import com.bumptech.glide.request.target.Target;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -375,7 +381,7 @@ public class MainActivity extends AppCompatActivity {
         if (wadahGambar == null) return;
         wadahGambar.removeAllViews();
         for (int i = 0; i < urutanTerpilih.size(); i++) {
-            ImageView gambar = new ImageView(this);
+            NaturalImageView gambar = new NaturalImageView(this);
             gambar.setAdjustViewBounds(true);
             gambar.setScaleType(ImageView.ScaleType.FIT_CENTER);
             gambar.setBackgroundColor(Color.BLACK);
@@ -384,7 +390,34 @@ public class MainActivity extends AppCompatActivity {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             if (i > 0) lp.setMargins(0, dp(jarakDp), 0, 0);
             wadahGambar.addView(gambar, lp);
-            Glide.with(this).load(urutanTerpilih.get(i)).fitCenter().into(gambar);
+            Glide.with(this)
+                    .load(urutanTerpilih.get(i))
+                    .format(DecodeFormat.PREFER_ARGB_8888)
+                    .diskCacheStrategy(DiskCacheStrategy.DATA)
+                    .override(getResources().getDisplayMetrics().widthPixels, Target.SIZE_ORIGINAL)
+                    .dontTransform()
+                    .into(gambar);
+        }
+    }
+
+    /** Menjaga rasio asli gambar saat lebarnya mengikuti layar. */
+    private static class NaturalImageView extends AppCompatImageView {
+        NaturalImageView(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            Drawable drawable = getDrawable();
+            int lebar = MeasureSpec.getSize(widthMeasureSpec);
+            if (drawable != null && drawable.getIntrinsicWidth() > 0
+                    && drawable.getIntrinsicHeight() > 0 && lebar > 0) {
+                int tinggi = Math.max(1, Math.round(
+                        lebar * (drawable.getIntrinsicHeight() / (float) drawable.getIntrinsicWidth())));
+                setMeasuredDimension(lebar, tinggi);
+            } else {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            }
         }
     }
 
