@@ -24,7 +24,6 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,6 +34,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -62,7 +64,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean sedangMembaca = false;
     private boolean layarPenuh = false;
     private LinearLayout bilahPembaca;
-    private LinearLayout wadahGambar;
+    private RecyclerView daftarPembaca;
+    private ReaderAdapter readerAdapter;
     private int jarakDp = 0;
 
     private final ActivityResultLauncher<Intent> pemilihFoto =
@@ -121,6 +124,9 @@ public class MainActivity extends AppCompatActivity {
 
         RecyclerView galeri = new RecyclerView(this);
         galeri.setLayoutManager(new GridLayoutManager(this, 3));
+        galeri.setHasFixedSize(true);
+        galeri.setItemViewCacheSize(6);
+        galeri.setItemAnimator(null);
         galleryAdapter = new GalleryAdapter();
         galeri.setAdapter(galleryAdapter);
         akar.addView(galeri, new LinearLayout.LayoutParams(
@@ -147,6 +153,7 @@ public class MainActivity extends AppCompatActivity {
         akar.addView(bilahPilihan);
 
         setContentView(akar);
+        terapkanInsetSistem(akar, true);
     }
 
     private void periksaIzinDanMuat() {
@@ -237,6 +244,7 @@ public class MainActivity extends AppCompatActivity {
         pilih.setOnClickListener(v -> bukaPemilihFoto());
         akar.addView(pilih, new LinearLayout.LayoutParams(dp(150), dp(50)));
         setContentView(akar);
+        terapkanInsetSistem(akar, true);
     }
 
     private void bukaPemilihFoto() {
@@ -362,42 +370,40 @@ public class MainActivity extends AppCompatActivity {
         bilahPembaca.addView(penuh, pPenuh);
         akar.addView(bilahPembaca);
 
-        ScrollView gulir = new ScrollView(this);
-        gulir.setFillViewport(true);
-        gulir.setBackgroundColor(Color.BLACK);
-        wadahGambar = new LinearLayout(this);
-        wadahGambar.setOrientation(LinearLayout.VERTICAL);
-        wadahGambar.setBackgroundColor(Color.BLACK);
-        gulir.addView(wadahGambar, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        akar.addView(gulir, new LinearLayout.LayoutParams(
+        daftarPembaca = new RecyclerView(this);
+        LinearLayoutManager pengelola = new LinearLayoutManager(this);
+        pengelola.setRecycleChildrenOnDetach(true);
+        daftarPembaca.setLayoutManager(pengelola);
+        daftarPembaca.setBackgroundColor(Color.BLACK);
+        daftarPembaca.setItemViewCacheSize(2);
+        daftarPembaca.setItemAnimator(null);
+        daftarPembaca.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        readerAdapter = new ReaderAdapter();
+        daftarPembaca.setAdapter(readerAdapter);
+        akar.addView(daftarPembaca, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
 
         setContentView(akar);
+        terapkanInsetSistem(akar, true);
         susunGambar();
     }
 
     private void susunGambar() {
-        if (wadahGambar == null) return;
-        wadahGambar.removeAllViews();
-        for (int i = 0; i < urutanTerpilih.size(); i++) {
-            NaturalImageView gambar = new NaturalImageView(this);
-            gambar.setAdjustViewBounds(true);
-            gambar.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            gambar.setBackgroundColor(Color.BLACK);
-            gambar.setOnClickListener(v -> setLayarPenuh(!layarPenuh));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            if (i > 0) lp.setMargins(0, dp(jarakDp), 0, 0);
-            wadahGambar.addView(gambar, lp);
-            Glide.with(this)
-                    .load(urutanTerpilih.get(i))
-                    .format(DecodeFormat.PREFER_ARGB_8888)
-                    .diskCacheStrategy(DiskCacheStrategy.DATA)
-                    .override(getResources().getDisplayMetrics().widthPixels, Target.SIZE_ORIGINAL)
-                    .dontTransform()
-                    .into(gambar);
-        }
+        if (readerAdapter != null) readerAdapter.notifyDataSetChanged();
+    }
+
+    private void terapkanInsetSistem(View view, boolean tambahRuangAtas) {
+        int kiri = view.getPaddingLeft();
+        int atas = view.getPaddingTop();
+        int kanan = view.getPaddingRight();
+        int bawah = view.getPaddingBottom();
+        ViewCompat.setOnApplyWindowInsetsListener(view, (v, insets) -> {
+            Insets bilah = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(kiri, atas + bilah.top + (tambahRuangAtas ? dp(8) : 0),
+                    kanan, bawah + bilah.bottom);
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(view);
     }
 
     /** Menjaga rasio asli gambar saat lebarnya mengikuti layar. */
@@ -519,7 +525,12 @@ public class MainActivity extends AppCompatActivity {
 
         @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
             Uri uri = semuaFoto.get(position);
-            Glide.with(MainActivity.this).load(uri).centerCrop().into(holder.image);
+            Glide.with(MainActivity.this)
+                    .load(uri)
+                    .format(DecodeFormat.PREFER_RGB_565)
+                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                    .centerCrop()
+                    .into(holder.image);
             holder.cek.setVisibility(pilihan.contains(uri) ? View.VISIBLE : View.GONE);
             holder.itemView.setOnClickListener(v -> {
                 ubahPilihan(uri);
@@ -530,6 +541,12 @@ public class MainActivity extends AppCompatActivity {
 
         @Override public int getItemCount() { return semuaFoto.size(); }
 
+        @Override public void onViewRecycled(@NonNull Holder holder) {
+            Glide.with(MainActivity.this).clear(holder.image);
+            holder.image.setImageDrawable(null);
+            super.onViewRecycled(holder);
+        }
+
         class Holder extends RecyclerView.ViewHolder {
             final ImageView image;
             final TextView cek;
@@ -537,6 +554,49 @@ public class MainActivity extends AppCompatActivity {
                 super(item);
                 this.image = image;
                 this.cek = cek;
+            }
+        }
+    }
+
+    private class ReaderAdapter extends RecyclerView.Adapter<ReaderAdapter.Holder> {
+        @NonNull @Override
+        public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            NaturalImageView gambar = new NaturalImageView(MainActivity.this);
+            gambar.setAdjustViewBounds(true);
+            gambar.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            gambar.setBackgroundColor(Color.BLACK);
+            gambar.setOnClickListener(v -> setLayarPenuh(!layarPenuh));
+            gambar.setLayoutParams(new RecyclerView.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            return new Holder(gambar);
+        }
+
+        @Override public void onBindViewHolder(@NonNull Holder holder, int position) {
+            RecyclerView.LayoutParams lp = (RecyclerView.LayoutParams) holder.gambar.getLayoutParams();
+            lp.setMargins(0, position > 0 ? dp(jarakDp) : 0, 0, 0);
+            holder.gambar.setLayoutParams(lp);
+            Glide.with(MainActivity.this)
+                    .load(urutanTerpilih.get(position))
+                    .format(DecodeFormat.PREFER_RGB_565)
+                    .diskCacheStrategy(DiskCacheStrategy.RESOURCE)
+                    .override(getResources().getDisplayMetrics().widthPixels, Target.SIZE_ORIGINAL)
+                    .fitCenter()
+                    .into(holder.gambar);
+        }
+
+        @Override public int getItemCount() { return urutanTerpilih.size(); }
+
+        @Override public void onViewRecycled(@NonNull Holder holder) {
+            Glide.with(MainActivity.this).clear(holder.gambar);
+            holder.gambar.setImageDrawable(null);
+            super.onViewRecycled(holder);
+        }
+
+        class Holder extends RecyclerView.ViewHolder {
+            final NaturalImageView gambar;
+            Holder(NaturalImageView gambar) {
+                super(gambar);
+                this.gambar = gambar;
             }
         }
     }
