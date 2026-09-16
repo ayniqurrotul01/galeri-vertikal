@@ -31,6 +31,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.appcompat.widget.AppCompatImageView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -120,6 +121,7 @@ public class MainActivity extends AppCompatActivity {
         infoGaleri = teks("Memuat foto…", 14, Color.DKGRAY);
         infoGaleri.setGravity(Gravity.CENTER);
         infoGaleri.setPadding(dp(18), dp(8), dp(18), dp(12));
+        infoGaleri.setVisibility(semuaFoto.isEmpty() ? View.VISIBLE : View.GONE);
         akar.addView(infoGaleri);
 
         RecyclerView galeri = new RecyclerView(this);
@@ -154,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(akar);
         terapkanInsetSistem(akar, true);
+        perbaruiBilahPilihan();
     }
 
     private void periksaIzinDanMuat() {
@@ -213,13 +216,18 @@ public class MainActivity extends AppCompatActivity {
             String pesanAkhir = pesanMasalah;
             runOnUiThread(() -> {
                 if (isFinishing() || isDestroyed()) return;
+                LinkedHashSet<Uri> gabungan = new LinkedHashSet<>(urutanTerpilih);
+                gabungan.addAll(hasilFoto);
                 semuaFoto.clear();
-                semuaFoto.addAll(hasilFoto);
+                semuaFoto.addAll(gabungan);
                 if (galleryAdapter != null) galleryAdapter.notifyDataSetChanged();
                 if (infoGaleri != null) {
-                    if (pesanAkhir != null) infoGaleri.setText(pesanAkhir);
-                    else if (hasilFoto.isEmpty()) infoGaleri.setText("Belum ada foto yang bisa ditampilkan.");
-                    else infoGaleri.setVisibility(View.GONE);
+                    if (!semuaFoto.isEmpty()) infoGaleri.setVisibility(View.GONE);
+                    else {
+                        infoGaleri.setVisibility(View.VISIBLE);
+                        if (pesanAkhir != null) infoGaleri.setText(pesanAkhir);
+                        else infoGaleri.setText("Belum ada foto yang bisa ditampilkan.");
+                    }
                 }
             });
         }, "muat-galeri").start();
@@ -262,7 +270,13 @@ public class MainActivity extends AppCompatActivity {
             getContentResolver().takePersistableUriPermission(uri,
                     flags & Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (Exception ignored) { }
-        if (pilihan.add(uri)) urutanTerpilih.add(uri);
+        if (pilihan.add(uri)) {
+            urutanTerpilih.add(uri);
+            if (!semuaFoto.contains(uri)) {
+                int posisi = Math.min(urutanTerpilih.size() - 1, semuaFoto.size());
+                semuaFoto.add(posisi, uri);
+            }
+        }
     }
 
     private void ubahPilihan(Uri uri) {
@@ -344,14 +358,16 @@ public class MainActivity extends AppCompatActivity {
         bilahPembaca.setPadding(dp(8), dp(6), dp(8), dp(6));
         bilahPembaca.setBackgroundColor(Color.WHITE);
 
-        Button kembali = tombol("‹");
-        kembali.setTextSize(28);
+        AppCompatImageButton kembali = tombolIkon(R.drawable.ic_back);
+        kembali.setContentDescription("Kembali");
         kembali.setOnClickListener(v -> tampilkanGaleri());
         bilahPembaca.addView(kembali, new LinearLayout.LayoutParams(dp(52), dp(46)));
 
         TextView judul = teks("Galeri Vertikal", 19, Color.BLACK);
         judul.setTypeface(null, android.graphics.Typeface.BOLD);
-        bilahPembaca.addView(judul, new LinearLayout.LayoutParams(0, dp(50), 1));
+        LinearLayout.LayoutParams pJudul = new LinearLayout.LayoutParams(0, dp(50), 1);
+        pJudul.setMargins(dp(12), 0, 0, 0);
+        bilahPembaca.addView(judul, pJudul);
 
         Button jarak = tombol("Jarak: rapat");
         jarak.setOnClickListener(v -> {
@@ -476,6 +492,18 @@ public class MainActivity extends AppCompatActivity {
         button.setTextSize(13);
         button.setAllCaps(false);
         button.setPadding(dp(10), 0, dp(10), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.BLACK);
+        bg.setCornerRadius(dp(14));
+        button.setBackground(bg);
+        return button;
+    }
+
+    private AppCompatImageButton tombolIkon(int drawableRes) {
+        AppCompatImageButton button = new AppCompatImageButton(this);
+        button.setImageResource(drawableRes);
+        button.setScaleType(ImageView.ScaleType.CENTER);
+        button.setPadding(0, 0, 0, 0);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(Color.BLACK);
         bg.setCornerRadius(dp(14));
